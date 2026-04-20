@@ -34,13 +34,12 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
     uv venv /opt/venv --python python3.12
     export PATH="/opt/venv/bin:$PATH"
 
-    # torch / xformers: PyTorch wheel server から CUDA 版を明示的に取得
+    # torch / xformers: PyPI から（CUDA は nvidia-* パッケージ経由）
     uv pip install --no-cache \
         torch==2.8.0 \
         torchvision==0.23.0 \
         triton==3.4.0 \
-        xformers==0.0.28.post3 \
-        --index-url https://download.pytorch.org/whl/cu124
+        xformers==0.0.28.post3
 
     # 残りのパッケージ
     uv pip install --no-cache -r /workspace/requirements.txt
