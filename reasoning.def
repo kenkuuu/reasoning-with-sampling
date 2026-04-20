@@ -34,12 +34,14 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
     uv venv /opt/venv --python python3.12
     export PATH="/opt/venv/bin:$PATH"
 
-    # torch / xformers: PyPI から（CUDA は nvidia-* パッケージ経由）
+    # torch: PyPI から（CUDA は nvidia-* パッケージ経由）
     uv pip install --no-cache \
         torch==2.8.0 \
         torchvision==0.23.0 \
-        triton==3.4.0 \
-        xformers==0.0.28.post3
+        triton==3.4.0
+
+    # xformers は torch==2.5.1 を要求するが元環境も無視してインストール済み
+    uv pip install --no-cache --no-deps xformers==0.0.28.post3
 
     # 残りのパッケージ
     uv pip install --no-cache -r /workspace/requirements.txt
