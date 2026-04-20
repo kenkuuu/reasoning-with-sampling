@@ -1,22 +1,45 @@
 Bootstrap: docker
-From: pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
-
-%post
-    pip install --no-cache-dir \
-        transformers==4.47.1 \
-        accelerate==1.10.0 \
-        datasets==3.2.0 \
-        pandas==2.2.3 \
-        tqdm==4.67.1 \
-        sentencepiece==0.2.0 \
-        tiktoken==0.7.0 \
-        safetensors==0.4.5
+From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
 %files
     . /workspace
 
+%post
+    # System packages
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update && apt-get install -y --no-install-recommends \
+        software-properties-common \
+        build-essential \
+        pkg-config \
+        git \
+        libcairo2-dev \
+        libpango1.0-dev \
+        libglib2.0-dev \
+        libgl1 \
+        libunwind-dev \
+        ffmpeg \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        python3.12 \
+        python3.12-dev \
+        python3.12-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+    # uv
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="/root/.local/bin:$PATH"
+
+    # Python 仮想環境
+    uv venv /opt/venv --python python3.12
+    export PATH="/opt/venv/bin:$PATH"
+
+    # パッケージインストール
+    uv pip install --no-cache -r /workspace/requirements.txt
+
 %environment
+    export PATH="/opt/venv/bin:/root/.local/bin:$PATH"
     export PYTHONPATH=/workspace/llm_experiments:$PYTHONPATH
+    export VIRTUAL_ENV=/opt/venv
 
 %runscript
     cd /workspace/llm_experiments
