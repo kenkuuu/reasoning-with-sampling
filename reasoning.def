@@ -13,7 +13,7 @@ From: pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
         safetensors==0.4.5
 
 %files
-    llm_experiments/ /workspace/llm_experiments/
+    . /workspace
 
 %environment
     export PYTHONPATH=/workspace/llm_experiments:$PYTHONPATH
