@@ -43,8 +43,14 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
     # xformers は torch==2.5.1 を要求するが元環境も無視してインストール済み
     uv pip install --no-cache --no-deps xformers==0.0.28.post3
 
+    # 依存関係の過剰な制約を上書き（元の conda 環境と同様）
+    cat > /tmp/overrides.txt << 'EOF'
+numpy==2.2.6
+torch==2.8.0
+EOF
+
     # 残りのパッケージ
-    uv pip install --no-cache -r /workspace/requirements.txt
+    uv pip install --no-cache --override /tmp/overrides.txt -r /workspace/requirements.txt
 
 %environment
     export PATH="/opt/venv/bin:$PATH"
