@@ -20,6 +20,7 @@ echo "Running shard BATCH_IDX=${BATCH_IDX} with SEED=${SEED} (task ${SLURM_ARRAY
 
 singularity exec --nv \
   --bind ~/.cache/huggingface:/root/.cache/huggingface \
+  --bind "${REPO_DIR}/llm_experiments":/workspace/llm_experiments \
   --bind "${RESULTS_DIR}":/workspace/results \
   "${SIF}" \
   python /workspace/llm_experiments/power_samp_math.py \
