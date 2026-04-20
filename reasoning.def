@@ -5,17 +5,18 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
     . /workspace
 
 %post
-    # System packages
     export DEBIAN_FRONTEND=noninteractive
     apt-get update && apt-get install -y --no-install-recommends \
         software-properties-common \
         build-essential \
         pkg-config \
+        curl \
         git \
         libcairo2-dev \
         libpango1.0-dev \
         libglib2.0-dev \
         libgl1 \
+        libegl1 \
         libunwind-dev \
         ffmpeg \
     && add-apt-repository ppa:deadsnakes/ppa \
@@ -25,19 +26,27 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
         python3.12-venv \
     && rm -rf /var/lib/apt/lists/*
 
-    # uv
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="/root/.local/bin:$PATH"
+    # pip → uv
+    python3.12 -m ensurepip --upgrade
+    python3.12 -m pip install uv --quiet
 
-    # Python 仮想環境
+    # 仮想環境
     uv venv /opt/venv --python python3.12
     export PATH="/opt/venv/bin:$PATH"
 
-    # パッケージインストール
+    # torch / xformers: PyTorch wheel server から CUDA 版を明示的に取得
+    uv pip install --no-cache \
+        torch==2.8.0 \
+        torchvision==0.23.0 \
+        triton==3.4.0 \
+        xformers==0.0.28.post3 \
+        --index-url https://download.pytorch.org/whl/cu124
+
+    # 残りのパッケージ
     uv pip install --no-cache -r /workspace/requirements.txt
 
 %environment
-    export PATH="/opt/venv/bin:/root/.local/bin:$PATH"
+    export PATH="/opt/venv/bin:$PATH"
     export PYTHONPATH=/workspace/llm_experiments:$PYTHONPATH
     export VIRTUAL_ENV=/opt/venv
 
