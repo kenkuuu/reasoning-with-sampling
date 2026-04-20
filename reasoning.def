@@ -1,0 +1,23 @@
+Bootstrap: docker
+From: pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+
+%post
+    pip install --no-cache-dir \
+        transformers==4.47.1 \
+        accelerate==1.10.0 \
+        datasets==3.2.0 \
+        pandas==2.2.3 \
+        tqdm==4.67.1 \
+        sentencepiece==0.2.0 \
+        tiktoken==0.7.0 \
+        safetensors==0.4.5
+
+%files
+    llm_experiments/ /workspace/llm_experiments/
+
+%environment
+    export PYTHONPATH=/workspace/llm_experiments:$PYTHONPATH
+
+%runscript
+    cd /workspace/llm_experiments
+    exec python "$@"
