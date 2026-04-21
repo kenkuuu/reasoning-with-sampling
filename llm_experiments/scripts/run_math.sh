@@ -2,9 +2,23 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# スクリプトは llm_experiments/scripts/ にあるため，2階層上がプロジェクトルート
-# コンテナ外（ホスト直接実行）でも /workspace bind-mount 環境でも同じパスが解決される
-RESULTS_DIR="${RESULTS_DIR:-$(realpath "${SCRIPT_DIR}/../../results")}"
+# RESULTS_DIR の解決:
+#   コンテナ外: スクリプトの2階層上（プロジェクトルート）/results
+#   Singularity コンテナ内: /workspace は読み取り専用のため,
+#     $SINGULARITY_BIND から llm_experiments のホスト側パスを逆引きして results を導出
+if [ -n "${SINGULARITY_NAME:-}" ]; then
+    _HOST_LLM=$(printenv SINGULARITY_BIND 2>/dev/null | tr ',' '\n' | \
+        awk -F: '$2=="/workspace/llm_experiments"{print $1}')
+    if [ -n "${_HOST_LLM}" ]; then
+        _DEFAULT_RESULTS="$(realpath "${_HOST_LLM}/../results")"
+    else
+        # bind 情報が取れない場合は $HOME 以下に書き込む
+        _DEFAULT_RESULTS="${HOME}/reasoning-with-sampling/results"
+    fi
+else
+    _DEFAULT_RESULTS="$(realpath "${SCRIPT_DIR}/../../results")"
+fi
+RESULTS_DIR="${RESULTS_DIR:-${_DEFAULT_RESULTS}}"
 
 MODEL="${1:-qwen_math}"
 MCMC_STEPS="${2:-10}"
