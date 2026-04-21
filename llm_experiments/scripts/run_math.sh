@@ -22,7 +22,8 @@ run_shard() {
     local batch_idx=$2
     local seed=$3
     echo "GPU${gpu}: batch_idx=${batch_idx} seed=${seed}"
-    CUDA_VISIBLE_DEVICES=${gpu} python "${SCRIPT_DIR}/../power_samp_math.py" \
+    cd "${SCRIPT_DIR}/.."
+    CUDA_VISIBLE_DEVICES=${gpu} python power_samp_math.py \
             --batch_idx="${batch_idx}" \
             --mcmc_steps="${MCMC_STEPS}" \
             --temperature="${TEMPERATURE}" \
