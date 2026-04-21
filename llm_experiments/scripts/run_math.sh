@@ -2,19 +2,10 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# RESULTS_DIR の解決:
-#   コンテナ外: スクリプトの2階層上（プロジェクトルート）/results
-#   Singularity コンテナ内: /workspace は読み取り専用のため,
-#     $SINGULARITY_BIND から llm_experiments のホスト側パスを逆引きして results を導出
+# Singularity 内: /workspace/results を bind-mount して使う（Flash_Storage はシンボリックリンクのため不可）
+# コンテナ外（ホスト直接実行）: スクリプトの2階層上（プロジェクトルート）/results
 if [ -n "${SINGULARITY_NAME:-}" ]; then
-    _HOST_LLM=$(printenv SINGULARITY_BIND 2>/dev/null | tr ',' '\n' | \
-        awk -F: '$2=="/workspace/llm_experiments"{print $1}')
-    if [ -n "${_HOST_LLM}" ]; then
-        _DEFAULT_RESULTS="$(realpath -m "${_HOST_LLM}/../results")"
-    else
-        # bind 情報が取れない場合は $HOME 以下に書き込む
-        _DEFAULT_RESULTS="${HOME}/reasoning-with-sampling/results"
-    fi
+    _DEFAULT_RESULTS="/workspace/results"
 else
     _DEFAULT_RESULTS="$(realpath -m "${SCRIPT_DIR}/../../results")"
 fi
