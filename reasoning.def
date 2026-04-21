@@ -36,6 +36,7 @@ From: pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 torch==2.6.0
 torchvision==0.21.0
 numpy==2.2.6
+sympy==1.14.0
 EOF
 
     uv pip install --python ${CONDA_PYTHON} --no-cache \
