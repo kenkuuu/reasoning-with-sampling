@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
+From: pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 %files
     . /workspace
@@ -7,7 +7,6 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 %post
     export DEBIAN_FRONTEND=noninteractive
     apt-get update && apt-get install -y --no-install-recommends \
-        software-properties-common \
         build-essential \
         pkg-config \
         curl \
@@ -19,43 +18,32 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
         libegl1 \
         libunwind-dev \
         ffmpeg \
-    && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update && apt-get install -y --no-install-recommends \
-        python3.12 \
-        python3.12-dev \
-        python3.12-venv \
     && rm -rf /var/lib/apt/lists/*
 
-    # pip → uv
-    python3.12 -m ensurepip --upgrade
-    python3.12 -m pip install uv --quiet
+    # uv（base image の conda Python に対してインストール）
+    pip install uv --quiet --root-user-action=ignore
 
-    # 仮想環境
-    uv venv /opt/venv --python python3.12
-    export PATH="/opt/venv/bin:$PATH"
+    # torchvision: torch 2.6.0 互換版（base image に torch は含まれているが torchvision は含まれない）
+    CONDA_PYTHON=/opt/conda/bin/python
 
-    # torch: PyPI から（CUDA は nvidia-* パッケージ経由）
-    uv pip install --no-cache \
-        torch==2.8.0 \
-        torchvision==0.23.0 \
-        triton==3.4.0
+    uv pip install --python ${CONDA_PYTHON} --no-cache torchvision==0.21.0
 
-    # xformers は torch==2.5.1 を要求するが元環境も無視してインストール済み
-    uv pip install --no-cache --no-deps xformers==0.0.28.post3
+    # xformers: torch 依存の制約を無視してインストール
+    uv pip install --python ${CONDA_PYTHON} --no-cache --no-deps xformers==0.0.28.post3
 
-    # 依存関係の過剰な制約を上書き（元の conda 環境と同様）
+    # torch/torchvision は base image のバージョンで固定（2.8.0 を要求するパッケージを上書き）
     cat > /tmp/overrides.txt << 'EOF'
+torch==2.6.0
+torchvision==0.21.0
 numpy==2.2.6
-torch==2.8.0
 EOF
 
-    # 残りのパッケージ
-    uv pip install --no-cache --override /tmp/overrides.txt -r /workspace/requirements.txt
+    uv pip install --python ${CONDA_PYTHON} --no-cache \
+        --override /tmp/overrides.txt \
+        -r /workspace/requirements.txt
 
 %environment
-    export PATH="/opt/venv/bin:$PATH"
     export PYTHONPATH=/workspace/llm_experiments:$PYTHONPATH
-    export VIRTUAL_ENV=/opt/venv
 
 %runscript
     cd /workspace/llm_experiments
