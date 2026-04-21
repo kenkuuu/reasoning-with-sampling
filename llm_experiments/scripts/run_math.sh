@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-SIF="${REPO_DIR}/reasoning.sif"
-RESULTS_DIR="${REPO_DIR}/results"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# $HOME は Singularity が自動マウントするため常に書き込み可能
+RESULTS_DIR="${RESULTS_DIR:-${HOME}/reasoning-with-sampling/results}"
 
 MODEL="${1:-qwen_math}"
 MCMC_STEPS="${2:-10}"
@@ -16,18 +16,13 @@ run_shard() {
     local batch_idx=$2
     local seed=$3
     echo "GPU${gpu}: batch_idx=${batch_idx} seed=${seed}"
-    CUDA_VISIBLE_DEVICES=${gpu} singularity exec --nv \
-        --bind ~/.cache/huggingface:/root/.cache/huggingface \
-        --bind "${REPO_DIR}/llm_experiments":/workspace/llm_experiments \
-        --bind "${RESULTS_DIR}":/workspace/results \
-        "${SIF}" \
-        python /workspace/llm_experiments/power_samp_math.py \
+    CUDA_VISIBLE_DEVICES=${gpu} python "${SCRIPT_DIR}/../power_samp_math.py" \
             --batch_idx="${batch_idx}" \
             --mcmc_steps="${MCMC_STEPS}" \
             --temperature="${TEMPERATURE}" \
             --seed="${seed}" \
             --model="${MODEL}" \
-            --save_str=/workspace/results \
+            --save_str="${RESULTS_DIR}" \
         > "${RESULTS_DIR}/gpu${gpu}_batch${batch_idx}_seed${seed}.log" 2>&1
 }
 
