@@ -2,8 +2,9 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# $HOME は Singularity が自動マウントするため常に書き込み可能
-RESULTS_DIR="${RESULTS_DIR:-${HOME}/reasoning-with-sampling/results}"
+# スクリプトは llm_experiments/scripts/ にあるため，2階層上がプロジェクトルート
+# コンテナ外（ホスト直接実行）でも /workspace bind-mount 環境でも同じパスが解決される
+RESULTS_DIR="${RESULTS_DIR:-$(realpath "${SCRIPT_DIR}/../../results")}"
 
 MODEL="${1:-qwen_math}"
 MCMC_STEPS="${2:-10}"
