@@ -82,7 +82,7 @@ if __name__ == "__main__":
 
     config = transformers.AutoConfig.from_pretrained(model_str, trust_remote_code=False, local_files_only=True)
     tokenizer = transformers.AutoTokenizer.from_pretrained(model_str, trust_remote_code=False, local_files_only=True)
-    hf_model = transformers.AutoModelForCausalLM.from_pretrained(model_str, config=config, torch_dtype="auto", device_map="auto", trust_remote_code=False, local_files_only=True).to(device)
+    hf_model = transformers.AutoModelForCausalLM.from_pretrained(model_str, config=config, torch_dtype="auto", device_map="auto", attn_implementation="sdpa", trust_remote_code=False, local_files_only=True).to(device)
 
     autoreg_sampler = AutoregressiveSampler(hf_model, tokenizer, device)
 

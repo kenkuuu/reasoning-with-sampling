@@ -84,7 +84,7 @@ if __name__ == "__main__":
     # --- モデル・トークナイザのロード ---
     # device_map="auto" で利用可能な GPU に自動配置
     tokenizer = transformers.AutoTokenizer.from_pretrained(model_str, trust_remote_code = True)
-    hf_model = transformers.AutoModelForCausalLM.from_pretrained(model_str, torch_dtype="auto", device_map="auto", trust_remote_code = True).to(device)
+    hf_model = transformers.AutoModelForCausalLM.from_pretrained(model_str, torch_dtype="auto", device_map="auto", attn_implementation="sdpa", trust_remote_code=True).to(device)
     # AutoregressiveSampler: MCMC の提案生成とトークン log 確率計算をラップするクラス
     autoreg_sampler = AutoregressiveSampler(hf_model, tokenizer, device)
 

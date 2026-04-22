@@ -44,8 +44,10 @@ def mcmc_power_samp_alp(p : AutoregressiveSampler, context, temp, mcmc_steps, ma
     acceptances = 0
 
 
+    context_kv = get_kv_cache(p, context)
+
     for _ in tqdm(range(block_num)):
-        gen, lp_norm, lp_unnorm = naive_temp(p, gen, 0.5, seq_len=jump_size+len(gen))
+        gen, lp_norm, lp_unnorm, _ = naive_temp(p, gen, 0.5, seq_len=jump_size+len(gen))
         log_probs_norm.extend(lp_norm)
         log_probs_unnorm.extend(lp_unnorm)
 
@@ -53,8 +55,9 @@ def mcmc_power_samp_alp(p : AutoregressiveSampler, context, temp, mcmc_steps, ma
             attempts+=1
             t = len(gen)
             idx = random.randint(c, t-1)
-            # llm query takes the burden of time
-            prop, log_prob_prop, target_log_prob_prop = naive_temp(p, gen[:idx], 0.5, seq_len=t)
+            prop, log_prob_prop, target_log_prob_prop, _ = naive_temp(
+                p, gen[:idx], 0.5, seq_len=t,
+                past_key_values=context_kv, past_length=c)
             s = len(prop)
             assert(len(log_prob_prop) == s - idx)
             assert(len(target_log_prob_prop) == s - idx)
@@ -134,7 +137,7 @@ if __name__ == "__main__":
 
     print("dataset done")
     tokenizer = transformers.AutoTokenizer.from_pretrained(model_str, trust_remote_code = True)
-    hf_model = transformers.AutoModelForCausalLM.from_pretrained(model_str, torch_dtype="auto", device_map="auto", trust_remote_code = True).to(device)
+    hf_model = transformers.AutoModelForCausalLM.from_pretrained(model_str, torch_dtype="auto", device_map="auto", attn_implementation="sdpa", trust_remote_code=True).to(device)
     autoreg_sampler = AutoregressiveSampler(hf_model, tokenizer, device)
 
     print("loaded models")
