@@ -39,20 +39,18 @@ run_shard() {
         > "${RESULTS_DIR}/eg_gpu${gpu}_batch${batch_idx}_seed${seed}.log" 2>&1
 }
 
-# 5 shards × 8 seeds = 40 タスクを 4GPU で順次処理
+# 4 shards × 1 seed = 4 タスクを 4GPU で並列処理
 PIDS=()
 TASK=0
-for BATCH_IDX in 0 1 2 3 4; do
-    for SEED in 0 1 2 3 4 5 6 7; do
-        GPU=$(( TASK % 4 ))
-        run_shard "${GPU}" "${BATCH_IDX}" "${SEED}" &
-        PIDS+=($!)
-        TASK=$(( TASK + 1 ))
-        if (( TASK % 4 == 0 )); then
-            wait "${PIDS[@]}"
-            PIDS=()
-        fi
-    done
+for BATCH_IDX in 0 1 2 3; do
+    GPU=$(( TASK % 4 ))
+    run_shard "${GPU}" "${BATCH_IDX}" "0" &
+    PIDS+=($!)
+    TASK=$(( TASK + 1 ))
+    if (( TASK % 4 == 0 )); then
+        wait "${PIDS[@]}"
+        PIDS=()
+    fi
 done
 wait "${PIDS[@]}"
 

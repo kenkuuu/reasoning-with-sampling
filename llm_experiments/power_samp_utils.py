@@ -45,7 +45,11 @@ class AutoregressiveSampler:
         device = self.device
         torch_prefix = torch.tensor([prefix], dtype=torch.long, device=device)
         # コンテキスト長超過時は末尾 block_size トークンのみ使用
-        prefix_cond = torch_prefix if torch_prefix.size(1) <= self.block_size else torch_prefix[:, -self.block_size:]
+        prefix_cond = (
+            torch_prefix
+            if torch_prefix.size(1) <= self.block_size
+            else torch_prefix[:, -self.block_size :]
+        )
         output = self.model(prefix_cond)
         logits = output.logits[0, -1, :]
         probs = F.softmax(logits, dim=-1)
@@ -62,21 +66,31 @@ def get_kv_cache(p: AutoregressiveSampler, tokens):
 
 # --- ユーティリティ関数 ---
 
+
 def normalize(dist):
     """ロジットを softmax で確率分布に正規化する。"""
     return F.softmax(dist, dim=-1)
 
+
 def dist_product(logit_p, logit_q):
     """2 つの分布のロジットを加算する（確率の積 p*q に対応）。"""
     return logit_p + logit_q
+
 
 def dist_temp_scale(logit_p, temp):
     """ロジットを温度 τ でスケーリングする（p^{1/τ} に対応）。"""
     return logit_p * torch.tensor(1 / temp, dtype=logit_p.dtype, device=logit_p.device)
 
 
-def naive_temp(p: AutoregressiveSampler, context, temp, seq_len,
-               past_key_values=None, past_length=0, return_entropy=False):
+def naive_temp(
+    p: AutoregressiveSampler,
+    context,
+    temp,
+    seq_len,
+    past_key_values=None,
+    past_length=0,
+    return_entropy=False,
+):
     """
     低温サンプリングによる提案分布からの系列生成。
 
@@ -112,11 +126,11 @@ def naive_temp(p: AutoregressiveSampler, context, temp, seq_len,
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.eos_token_id,
         return_dict_in_generate=True,
-        output_scores=True,   # 温度スケール後のロジット（提案分布用）
-        output_logits=True,   # 温度スケール前のロジット（ベースモデル評価用）
+        output_scores=True,  # 温度スケール後のロジット（提案分布用）
+        output_logits=True,  # 温度スケール前のロジット（ベースモデル評価用）
     )
     unscaled_logits = torch.stack(output.logits, dim=0)  # shape: (生成長, 1, vocab)
-    scaled_logits   = torch.stack(output.scores, dim=0)  # shape: (生成長, 1, vocab)
+    scaled_logits = torch.stack(output.scores, dim=0)  # shape: (生成長, 1, vocab)
 
     n_input = len(input_tokens)
     gen_tokens = output.sequences[0][n_input:]  # 新規生成トークン列
@@ -129,24 +143,32 @@ def naive_temp(p: AutoregressiveSampler, context, temp, seq_len,
     assert len(gen_tokens) == unscaled_logits.shape[0] == scaled_logits.shape[0]
 
     idx = gen_tokens.view(unscaled_logits.shape[0], 1, 1)
-    log_probs_unnorm = (1/temp * torch.gather(F.log_softmax(unscaled_logits, dim=-1), -1, idx)).view(-1).tolist()
-    log_probs_norm   = torch.gather(F.log_softmax(scaled_logits, dim=-1), -1, idx).view(-1).tolist()
+    log_probs_unnorm = (
+        (1 / temp * torch.gather(F.log_softmax(unscaled_logits, dim=-1), -1, idx))
+        .view(-1)
+        .tolist()
+    )
+    log_probs_norm = (
+        torch.gather(F.log_softmax(scaled_logits, dim=-1), -1, idx).view(-1).tolist()
+    )
 
     assert len(gen_tokens) == len(log_probs_unnorm) == len(log_probs_norm)
 
-    out_kv = getattr(output, 'past_key_values', None)
+    out_kv = getattr(output, "past_key_values", None)
 
     if return_entropy:
         # ベースモデルの確率分布からトークンごとのエントロピーを計算
         # unscaled_logits は温度スケール前のロジット: shape (gen_len, 1, vocab)
-        probs = F.softmax(unscaled_logits.squeeze(1), dim=-1)          # (gen_len, vocab)
+        probs = F.softmax(unscaled_logits.squeeze(1), dim=-1)  # (gen_len, vocab)
         entropies = -(probs * torch.log(probs.clamp(min=1e-10))).sum(dim=-1).tolist()
         return prop, log_probs_norm, log_probs_unnorm, out_kv, entropies
 
     return prop, log_probs_norm, log_probs_unnorm, out_kv
 
 
-def max_swap(p: AutoregressiveSampler, context, temp, mcmc_steps, max_new_tokens, block_num=16):
+def max_swap(
+    p: AutoregressiveSampler, context, temp, mcmc_steps, max_new_tokens, block_num=16
+):
     """
     alpha → ∞ 極限の power sampling（greedy swap）。
 
@@ -155,7 +177,7 @@ def max_swap(p: AutoregressiveSampler, context, temp, mcmc_steps, max_new_tokens
     これは目標分布の最頻値（MAP）に向かって確定的に進む手法。
     """
     c = len(context)
-    print(f'Temp: {temp}')
+    print(f"Temp: {temp}")
     gen = context.copy() if context is not None else []
     log_probs_norm = []
     log_probs_unnorm = []
@@ -172,7 +194,9 @@ def max_swap(p: AutoregressiveSampler, context, temp, mcmc_steps, max_new_tokens
 
     for _ in tqdm(range(block_num)):
         # 現在の系列末尾に次のブロックを生成・追加
-        gen, lp_norm, lp_unnorm, _ = naive_temp(p, gen, temp=temp, seq_len=jump_size+len(gen))
+        gen, lp_norm, lp_unnorm, _ = naive_temp(
+            p, gen, temp=temp, seq_len=jump_size + len(gen)
+        )
         log_probs_norm.extend(lp_norm)
         log_probs_unnorm.extend(lp_unnorm)
 
@@ -180,24 +204,29 @@ def max_swap(p: AutoregressiveSampler, context, temp, mcmc_steps, max_new_tokens
             attempts += 1
             t = len(gen)
             # ランダムな位置 idx を選び、そこ以降を再生成（部分系列の swap）
-            idx = random.randint(c, t-1)
+            idx = random.randint(c, t - 1)
             # context の KV cache を再利用: gen[c:idx] だけ prefill し context 分をスキップ
             prop, log_prob_prop, target_log_prob_prop, _ = naive_temp(
-                p, gen[:idx], temp=temp, seq_len=t,
-                past_key_values=context_kv, past_length=c)
+                p,
+                gen[:idx],
+                temp=temp,
+                seq_len=t,
+                past_key_values=context_kv,
+                past_length=c,
+            )
             s = len(prop)
-            assert(len(log_prob_prop) == s - idx)
-            assert(len(target_log_prob_prop) == s - idx)
-            log_prob_cur = log_probs_norm.copy()[idx-c:s-c]
-            target_log_prob_cur = log_probs_unnorm.copy()[idx-c:s-c]
+            assert len(log_prob_prop) == s - idx
+            assert len(target_log_prob_prop) == s - idx
+            log_prob_cur = log_probs_norm.copy()[idx - c : s - c]
+            target_log_prob_cur = log_probs_unnorm.copy()[idx - c : s - c]
 
             # greedy 受容: ベースモデルスコアが改善する場合のみ受容（確率判定なし）
             log_r = sum(target_log_prob_prop) - sum(target_log_prob_cur)
             if log_r > 0:
                 acceptances += 1
                 gen = prop.copy()
-                log_probs_norm[idx-c:] = log_prob_prop.copy()
-                log_probs_unnorm[idx-c:] = target_log_prob_prop.copy()
+                log_probs_norm[idx - c :] = log_prob_prop.copy()
+                log_probs_unnorm[idx - c :] = target_log_prob_prop.copy()
 
                 del prop
                 del log_prob_prop
@@ -206,9 +235,9 @@ def max_swap(p: AutoregressiveSampler, context, temp, mcmc_steps, max_new_tokens
         # EOS が含まれていれば打ち切り
         if p.tokenizer.eos_token_id in gen:
             eos_idx = gen.index(p.tokenizer.eos_token_id)
-            gen = gen[:eos_idx + 1]
-            log_probs_norm = log_probs_norm[:eos_idx + 1]
-            log_probs_unnorm = log_probs_unnorm[:eos_idx + 1]
+            gen = gen[: eos_idx + 1]
+            log_probs_norm = log_probs_norm[: eos_idx + 1]
+            log_probs_unnorm = log_probs_unnorm[: eos_idx + 1]
             acceptance_ratio = acceptances / attempts
             return gen, log_probs_norm, log_probs_unnorm, acceptance_ratio
 
@@ -216,7 +245,9 @@ def max_swap(p: AutoregressiveSampler, context, temp, mcmc_steps, max_new_tokens
     return gen, log_probs_norm, log_probs_unnorm, acceptance_ratio
 
 
-def mcmc_power_samp(p: AutoregressiveSampler, context, temp, mcmc_steps, max_new_tokens, block_num=16):
+def mcmc_power_samp(
+    p: AutoregressiveSampler, context, temp, mcmc_steps, max_new_tokens, block_num=16
+):
     """
     MCMC による power sampling。目標分布 π(x) ∝ p(x)^{alpha}（alpha=1/τ）からサンプルする。
 
@@ -239,7 +270,7 @@ def mcmc_power_samp(p: AutoregressiveSampler, context, temp, mcmc_steps, max_new
     確率的に受容することで p^{alpha} の真の定常分布に収束する。
     """
     c = len(context)
-    print(f'alpha: {1/temp}')
+    print(f"alpha: {1/temp}")
     gen = context.copy() if context is not None else []
     log_probs_norm = []
     log_probs_unnorm = []
@@ -257,7 +288,9 @@ def mcmc_power_samp(p: AutoregressiveSampler, context, temp, mcmc_steps, max_new
 
     for _ in tqdm(range(block_num)):
         # 次のブロックを低温提案分布でサンプルして系列に追加
-        gen, lp_norm, lp_unnorm, _ = naive_temp(p, gen, temp=temp, seq_len=jump_size+len(gen))
+        gen, lp_norm, lp_unnorm, _ = naive_temp(
+            p, gen, temp=temp, seq_len=jump_size + len(gen)
+        )
         log_probs_norm.extend(lp_norm)
         log_probs_unnorm.extend(lp_unnorm)
 
@@ -265,29 +298,39 @@ def mcmc_power_samp(p: AutoregressiveSampler, context, temp, mcmc_steps, max_new
             attempts += 1
             t = len(gen)
             # swap 起点をランダムに選択（prefix は固定）
-            idx = random.randint(c, t-1)
+            idx = random.randint(c, t - 1)
             # gen[:idx] を prefix として提案系列を生成（context KV cache を再利用）
             prop, log_prob_prop, target_log_prob_prop, _ = naive_temp(
-                p, gen[:idx], temp=temp, seq_len=t,
-                past_key_values=context_kv, past_length=c)
+                p,
+                gen[:idx],
+                temp=temp,
+                seq_len=t,
+                past_key_values=context_kv,
+                past_length=c,
+            )
             s = len(prop)
-            assert(len(log_prob_prop) == s - idx)
-            assert(len(target_log_prob_prop) == s - idx)
+            assert len(log_prob_prop) == s - idx
+            assert len(target_log_prob_prop) == s - idx
 
             # idx 以降のトークン列について現在系列と提案系列の log 確率を比較
-            log_prob_cur = log_probs_norm.copy()[idx-c:s-c]
-            target_log_prob_cur = log_probs_unnorm.copy()[idx-c:s-c]
+            log_prob_cur = log_probs_norm.copy()[idx - c : s - c]
+            target_log_prob_cur = log_probs_unnorm.copy()[idx - c : s - c]
 
             # Metropolis-Hastings 受容率（対数）
             # log_r = log(π(prop)/π(cur)) + log(q(cur)/q(prop))
-            log_r = sum(target_log_prob_prop) + sum(log_prob_cur) - sum(target_log_prob_cur) - sum(log_prob_prop)
+            log_r = (
+                sum(target_log_prob_prop)
+                + sum(log_prob_cur)
+                - sum(target_log_prob_cur)
+                - sum(log_prob_prop)
+            )
 
             # 確率的受容判定
             if np.random.rand() < np.exp(log_r):
                 acceptances += 1
                 gen = prop.copy()
-                log_probs_norm[idx-c:] = log_prob_prop.copy()
-                log_probs_unnorm[idx-c:] = target_log_prob_prop.copy()
+                log_probs_norm[idx - c :] = log_prob_prop.copy()
+                log_probs_unnorm[idx - c :] = target_log_prob_prop.copy()
 
                 del prop
                 del log_prob_prop
@@ -296,9 +339,9 @@ def mcmc_power_samp(p: AutoregressiveSampler, context, temp, mcmc_steps, max_new
         # EOS が出現したら系列を打ち切って早期終了
         if p.tokenizer.eos_token_id in gen:
             eos_idx = gen.index(p.tokenizer.eos_token_id)
-            gen = gen[:eos_idx + 1]
-            log_probs_norm = log_probs_norm[:eos_idx + 1]
-            log_probs_unnorm = log_probs_unnorm[:eos_idx + 1]
+            gen = gen[: eos_idx + 1]
+            log_probs_norm = log_probs_norm[: eos_idx + 1]
+            log_probs_unnorm = log_probs_unnorm[: eos_idx + 1]
             acceptance_ratio = acceptances / attempts
             return gen, log_probs_norm, log_probs_unnorm, acceptance_ratio
 
@@ -308,16 +351,25 @@ def mcmc_power_samp(p: AutoregressiveSampler, context, temp, mcmc_steps, max_new
 
 def make_annealing_schedule(alpha_start=1.0, alpha_end=4.0, n_steps=10):
     """ステップ n に応じて alpha_start → alpha_end へ線形に増加するスケジュールを返す。"""
+
     def schedule(n):
         if n_steps <= 1:
             return alpha_end
         return alpha_start + (alpha_end - alpha_start) * (n - 1) / (n_steps - 1)
+
     return schedule
 
 
 def entropy_guided_block_mcmc(
-    p: AutoregressiveSampler, context, mcmc_steps, max_new_tokens, block_size,
-    tau_avg, tau_max, beta, temp
+    p: AutoregressiveSampler,
+    context,
+    mcmc_steps,
+    max_new_tokens,
+    block_size,
+    tau_avg,
+    tau_max,
+    beta,
+    temp,
 ):
     """
     Self-Contained Entropy-Guided Block MCMC。
@@ -350,23 +402,33 @@ def entropy_guided_block_mcmc(
 
         # Step 1: ブロック生成（エントロピーも記録）
         gen, lp_norm, lp_unnorm, _, entropies = naive_temp(
-            p, gen, temp=temp, seq_len=block_start + block_size,
-            past_key_values=context_kv, past_length=c,
-            return_entropy=True
+            p,
+            gen,
+            temp=temp,
+            seq_len=block_start + block_size,
+            past_key_values=context_kv,
+            past_length=c,
+            return_entropy=True,
         )
         # lp_base[i] = log p_base(x_t) = temp * lp_unnorm[i]（lp_unnorm = (1/temp)*log p_base）
         block_lp_norm = list(lp_norm)
         block_lp_base = [temp * lu for lu in lp_unnorm]
         block_entropies = list(entropies)
+        actual_block_len = len(block_entropies)  # EOS 早期終了時は block_size より短い
+
+        # EOS がブロック生成中に出た場合は即終了
+        if p.tokenizer.eos_token_id in gen[block_start:]:
+            eos_pos = gen.index(p.tokenizer.eos_token_id, block_start)
+            return gen[: eos_pos + 1], total_acceptances / max(total_attempts, 1)
 
         # Step 2: デュアル・トリガー
-        H_avg = sum(block_entropies) / block_size
+        H_avg = sum(block_entropies) / actual_block_len
         H_max = max(block_entropies)
 
         if H_avg <= tau_avg and H_max <= tau_max:
             if p.tokenizer.eos_token_id in gen[block_start:]:
                 eos_pos = gen.index(p.tokenizer.eos_token_id, block_start)
-                return gen[:eos_pos + 1], total_acceptances / max(total_attempts, 1)
+                return gen[: eos_pos + 1], total_acceptances / max(total_attempts, 1)
             continue
 
         # Step 3: エントロピー誘導型 MH ループ
@@ -374,32 +436,42 @@ def entropy_guided_block_mcmc(
             total_attempts += 1
 
             # ロールバック位置を q(t) ∝ exp(β*H_t) でサンプル
-            beta_h = torch.tensor([beta * h for h in block_entropies], dtype=torch.float32)
+            beta_h = torch.tensor(
+                [beta * h for h in block_entropies], dtype=torch.float32
+            )
             t_rel = torch.multinomial(torch.softmax(beta_h, dim=0), 1).item()
             t_abs = block_start + t_rel
             log_Z_curr = torch.logsumexp(beta_h, dim=0).item()
 
             # t_abs 以降を再生成
-            n_new = block_size - t_rel
+            n_new = actual_block_len - t_rel
             prop, prop_lp_norm, prop_lp_unnorm, _, prop_entropies = naive_temp(
-                p, gen[:t_abs], temp=temp, seq_len=t_abs + n_new,
-                past_key_values=context_kv, past_length=c,
-                return_entropy=True
+                p,
+                gen[:t_abs],
+                temp=temp,
+                seq_len=t_abs + n_new,
+                past_key_values=context_kv,
+                past_length=c,
+                return_entropy=True,
             )
             prop_lp_base = [temp * lu for lu in prop_lp_unnorm]
 
             # 提案系列のブロック全体エントロピー（prefix 部分は不変）
             new_block_entropies = block_entropies[:t_rel] + list(prop_entropies)
-            beta_h_new = torch.tensor([beta * h for h in new_block_entropies], dtype=torch.float32)
+            beta_h_new = torch.tensor(
+                [beta * h for h in new_block_entropies], dtype=torch.float32
+            )
             log_Z_new = torch.logsumexp(beta_h_new, dim=0).item()
 
             # 受容率（対数）
             # log A = α*(log p(new) - log p(curr))   目標分布の比
             #       + (log Z_curr - log Z_new)         ロールバック提案の正規化補正
             #       + (log p_prop(curr) - log p_prop(new))  提案分布の比
-            log_A = (alpha * (sum(prop_lp_base) - sum(block_lp_base[t_rel:]))
-                     + (log_Z_curr - log_Z_new)
-                     + (sum(block_lp_norm[t_rel:]) - sum(prop_lp_norm)))
+            log_A = (
+                alpha * (sum(prop_lp_base) - sum(block_lp_base[t_rel:]))
+                + (log_Z_curr - log_Z_new)
+                + (sum(block_lp_norm[t_rel:]) - sum(prop_lp_norm))
+            )
 
             if np.random.rand() < np.exp(log_A):
                 total_acceptances += 1
@@ -411,7 +483,7 @@ def entropy_guided_block_mcmc(
         # EOS チェック
         if p.tokenizer.eos_token_id in gen[block_start:]:
             eos_pos = gen.index(p.tokenizer.eos_token_id, block_start)
-            return gen[:eos_pos + 1], total_acceptances / max(total_attempts, 1)
+            return gen[: eos_pos + 1], total_acceptances / max(total_attempts, 1)
 
     return gen, total_acceptances / max(total_attempts, 1)
 
@@ -430,6 +502,8 @@ def format_prompt(question, model, tokenizer, cot=True):
         content_str = PROMPT + question
         content_str += COT if cot else BASE
         answer_context = [{"role": "user", "content": content_str}]
-        format_str = tokenizer.apply_chat_template(answer_context, tokenize=False, add_generation_prompt=True)
+        format_str = tokenizer.apply_chat_template(
+            answer_context, tokenize=False, add_generation_prompt=True
+        )
 
     return format_str
