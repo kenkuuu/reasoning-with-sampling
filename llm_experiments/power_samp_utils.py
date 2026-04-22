@@ -389,7 +389,6 @@ def entropy_guided_block_mcmc(
     c = len(context)
     alpha = 1.0 / temp  # 目標分布のべき乗指数
     gen = context.copy()
-    context_kv = get_kv_cache(p, context)
 
     assert max_new_tokens % block_size == 0
     num_blocks = max_new_tokens // block_size
@@ -406,8 +405,6 @@ def entropy_guided_block_mcmc(
             gen,
             temp=temp,
             seq_len=block_start + block_size,
-            past_key_values=context_kv,
-            past_length=c,
             return_entropy=True,
         )
         # lp_base[i] = log p_base(x_t) = temp * lp_unnorm[i]（lp_unnorm = (1/temp)*log p_base）
@@ -450,8 +447,6 @@ def entropy_guided_block_mcmc(
                 gen[:t_abs],
                 temp=temp,
                 seq_len=t_abs + n_new,
-                past_key_values=context_kv,
-                past_length=c,
                 return_entropy=True,
             )
             prop_lp_base = [temp * lu for lu in prop_lp_unnorm]
