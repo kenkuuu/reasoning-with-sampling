@@ -160,7 +160,7 @@ def naive_temp(
         # ベースモデルの確率分布からトークンごとのエントロピーを計算
         # unscaled_logits は温度スケール前のロジット: shape (gen_len, 1, vocab)
         probs = F.softmax(unscaled_logits.squeeze(1), dim=-1)  # (gen_len, vocab)
-        entropies = -(probs * torch.log(probs.clamp(min=1e-10))).sum(dim=-1).tolist()
+        entropies = (-(probs * torch.log(probs.clamp(min=1e-10))).sum(dim=-1)).tolist()
         return prop, log_probs_norm, log_probs_unnorm, out_kv, entropies
 
     return prop, log_probs_norm, log_probs_unnorm, out_kv
