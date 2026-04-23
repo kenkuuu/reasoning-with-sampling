@@ -1,7 +1,6 @@
+import argparse
 import pandas as pd
-import json
 from pathlib import Path
-from typing import List, Dict, Any
 from grader_utils.math_grader import grade_answer
 
 
@@ -15,49 +14,49 @@ def safe_grade(ans, correct_ans):
 def eval_math(fname):
     print(fname)
     df = pd.read_csv(fname)
-    base_correct = 0
-    temp_correct = 0
-    mcmc_correct = 0
     total = len(df)
+    is_entropy = "eg_answer" in df.columns
 
-    for i in range(total):
-        base_correct += safe_grade(df["std_answer"][i], df["correct_answer"][i])
-        temp_correct += safe_grade(df["naive_answer"][i], df["correct_answer"][i])
-        mcmc_correct += safe_grade(df["mcmc_answer"][i], df["correct_answer"][i])
+    std_correct = sum(safe_grade(df["std_answer"][i], df["correct_answer"][i]) for i in range(total))
 
-
-    return base_correct, temp_correct, mcmc_correct, total
+    if is_entropy:
+        method_correct = sum(safe_grade(df["eg_answer"][i], df["correct_answer"][i]) for i in range(total))
+        return std_correct, None, method_correct, total
+    else:
+        naive_correct = sum(safe_grade(df["naive_answer"][i], df["correct_answer"][i]) for i in range(total))
+        mcmc_correct = sum(safe_grade(df["mcmc_answer"][i], df["correct_answer"][i]) for i in range(total))
+        return std_correct, naive_correct, mcmc_correct, total
 
 
 def math_results(fnames):
-    base_total = 0
-    temp_total = 0
-    mcmc_total = 0
+    std_total = naive_total = mcmc_total = eg_total = 0
     total = 0
+    is_entropy = None
 
     for fname in fnames:
-        base, temp, mcmc, n = eval_math(fname)
-        base_total += base
-        temp_total += temp
-        mcmc_total += mcmc
+        std, naive, method, n = eval_math(fname)
+        std_total += std
         total += n
+        if naive is None:
+            is_entropy = True
+            eg_total += method
+        else:
+            is_entropy = False
+            naive_total += naive
+            mcmc_total += method
 
     denom = max(total, 1)
-    base_acc = base_total / denom
-    temp_acc = temp_total / denom
-    mcmc_acc = mcmc_total / denom
-
     print(f"Files evaluated: {len(fnames)}")
     print(f"Total questions: {total}")
-    print(f"Base accuracy:  {base_acc:.3f}")
-    print(f"Temp accuracy:  {temp_acc:.3f}")
-    print(f"MCMC accuracy:  {mcmc_acc:.3f}")
+    print(f"Std accuracy:   {std_total / denom:.3f}")
+    if is_entropy:
+        print(f"EG-MCMC accuracy: {eg_total / denom:.3f}")
+        return {"std_acc": std_total / denom, "eg_acc": eg_total / denom}
+    else:
+        print(f"Naive accuracy: {naive_total / denom:.3f}")
+        print(f"MCMC accuracy:  {mcmc_total / denom:.3f}")
+        return {"std_acc": std_total / denom, "naive_acc": naive_total / denom, "mcmc_acc": mcmc_total / denom}
 
-    return {
-        "base_acc": base_acc,
-        "temp_acc": temp_acc,
-        "mcmc_acc": mcmc_acc,
-    }
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
