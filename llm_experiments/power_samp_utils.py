@@ -282,10 +282,6 @@ def mcmc_power_samp(
     attempts = 0
     acceptances = 0
 
-    # context の KV cache を一度だけ計算し、全 swap 提案で再利用
-    # swap では gen[c:idx] だけ prefill すればよい（context の再計算をスキップ）
-    context_kv = get_kv_cache(p, context)
-
     for _ in tqdm(range(block_num)):
         # 次のブロックを低温提案分布でサンプルして系列に追加
         gen, lp_norm, lp_unnorm, _ = naive_temp(
@@ -299,14 +295,11 @@ def mcmc_power_samp(
             t = len(gen)
             # swap 起点をランダムに選択（prefix は固定）
             idx = random.randint(c, t - 1)
-            # gen[:idx] を prefix として提案系列を生成（context KV cache を再利用）
             prop, log_prob_prop, target_log_prob_prop, _ = naive_temp(
                 p,
                 gen[:idx],
                 temp=temp,
                 seq_len=t,
-                past_key_values=context_kv,
-                past_length=c,
             )
             s = len(prop)
             assert len(log_prob_prop) == s - idx
